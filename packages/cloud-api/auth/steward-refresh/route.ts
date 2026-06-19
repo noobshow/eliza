@@ -327,6 +327,17 @@ app.post("/", async (c) => {
   const claims = await verifyStewardTokenCached(c.env, token);
   if (!claims) {
     logRefresh("invalid-token-after-refresh");
+    // Steward already rotated the refresh token (the one in the browser's cookie
+    // is now consumed/invalid upstream), but the new access token doesn't verify
+    // locally — almost always a secret/config mismatch. Clear the now-stale
+    // cookies (mirroring the upstream-401 branch above) so the next load goes to
+    // a login surface instead of looping forever on a refresh token Steward has
+    // already invalidated.
+    const staleDomain = cookieDomainForHost(c.req.header("host"));
+    const staleOpts = staleDomain ? { path: "/", domain: staleDomain } : { path: "/" };
+    deleteCookie(c, STEWARD_TOKEN_COOKIE, staleOpts);
+    deleteCookie(c, STEWARD_REFRESH_TOKEN_COOKIE, staleOpts);
+    deleteCookie(c, STEWARD_AUTHED_COOKIE, staleOpts);
     return c.json(errorBody("Invalid token", "invalid_token"), 401);
   }
 
