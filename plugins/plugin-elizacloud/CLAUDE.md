@@ -204,6 +204,7 @@ All settings are optional except `ELIZAOS_CLOUD_API_KEY` (required for any authe
 | `ELIZAOS_CLOUD_ENABLED` | `false` — when true, enables container provisioning, device auth, bridge, and backup services |
 | `ELIZAOS_CLOUD_EXPERIMENTAL_TELEMETRY` | `false` |
 | `ELIZAOS_CLOUD_APP_VERSION` | `2.0.0-beta.0` |
+| `ELIZAOS_CLOUD_NATIVE_CONCURRENCY` | `1` — per-process cap on CONCURRENT native cloud text calls. Covers ALL native text routes sharing the one cerebras key: `/chat/completions` (native-transport callers), `/responses` (bare-`{ prompt }` buffered callers, incl. the primary reply action), and the streaming plain-prompt path (the permit is held for the full SSE lifetime). The per-turn burst comes from the prompt batcher (`dynamicPromptExecFromState`, always sets providerOptions -> `/chat/completions`) and the merged evaluator call — NOT from composeState providers (no provider calls `useModel` during composeState); firing them at once overruns the shared cerebras key's concurrent limit -> 429 -> retries. Default `1` serializes the burst (right for the cerebras-bottlenecked dedicated-agent default); the trade-off is that ALL native cloud text calls serialize in the process — non-cerebras deployments can raise this for parallelism. Embeddings use a separate `/embeddings` route and are NOT gated. |
 
 ### Optional — model tiers (each has a fallback bare env alias)
 
