@@ -1,28 +1,31 @@
 /**
  * Provisioning agent chat service.
  *
- * Runs entirely on Cloudflare Workers via Cerebras (ultra-fast inference).
- * Converses with the user while their dedicated container is provisioning.
- * Conversation history is stored in Redis, keyed per user, capped at 20
- * messages (10 turns), TTL 7 days.
+ * Runs entirely on Cloudflare Workers via the shared language-model router
+ * (Cerebras-direct on the happy path, with an automatic OpenRouter backup on a
+ * retryable upstream failure such as the free-tier 429). Converses with the
+ * user while their dedicated container is provisioning. Conversation history is
+ * stored in Redis, keyed per user, capped at 20 messages (10 turns), TTL 7 days.
  */
 
-import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import {
   type AgentSandboxStatus,
   agentSandboxesRepository,
 } from "../../db/repositories/agent-sandboxes";
 import { cache } from "../cache/client";
-import { getCloudAwareEnv } from "../runtime/cloud-bindings";
+import { CEREBRAS_DEFAULT_TEXT_SMALL_MODEL } from "../models";
+import { canonicalizeCerebrasModelId, getLanguageModel } from "../providers/language-model";
 import { logger } from "../utils/logger";
 
 const HISTORY_CACHE_KEY = (userId: string) => `prov-chat:${userId}`;
 const HISTORY_TTL_SECONDS = 604800; // 7 days
 const MAX_HISTORY_MESSAGES = 20; // 10 turns (user + assistant)
 
-const CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1";
-const CEREBRAS_MODEL = "gpt-oss-120b";
+// The provisioning persona runs on the bare Cerebras small model (gpt-oss-120b),
+// routed through the shared layer so it inherits cerebras-direct → OpenRouter
+// fallback and consistent model-id handling instead of a bespoke client.
+const PROVISIONING_CHAT_MODEL = canonicalizeCerebrasModelId(CEREBRAS_DEFAULT_TEXT_SMALL_MODEL);
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -66,18 +69,6 @@ Be conversational, warm, and genuinely helpful. If the user asks what you can do
 - Just have a friendly conversation
 
 Keep responses concise and natural. Don't repeat status information unless directly asked.`;
-}
-
-function getCerebrasClient(): ReturnType<typeof createOpenAI> {
-  const env = getCloudAwareEnv();
-  const apiKey = env.CEREBRAS_API_KEY;
-  if (!apiKey) {
-    throw new Error("CEREBRAS_API_KEY is not configured");
-  }
-  return createOpenAI({
-    apiKey,
-    baseURL: CEREBRAS_BASE_URL,
-  });
 }
 
 async function loadHistory(userId: string): Promise<ChatMessage[]> {
@@ -132,14 +123,15 @@ export async function provisioningAgentChat(
   const history = await loadHistory(userId);
   const updatedHistory: ChatMessage[] = [...history, { role: "user", content: userMessage }];
 
-  // Generate response
+  // Generate response through the shared router: cerebras-direct on the happy
+  // path, with an automatic OpenRouter backup on a retryable upstream failure
+  // (e.g. the free-tier 429). Only a non-retryable failure reaches the catch.
   let reply = "";
   try {
-    const cerebras = getCerebrasClient();
     const systemPrompt = buildSystemPrompt(containerStatus);
 
     const { text } = await generateText({
-      model: cerebras.chat(CEREBRAS_MODEL),
+      model: getLanguageModel(PROVISIONING_CHAT_MODEL),
       system: systemPrompt,
       messages: updatedHistory,
     });

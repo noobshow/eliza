@@ -381,9 +381,13 @@ export function getLanguageModel(model: string) {
     return client.languageModel(apiModelId);
   }
 
-  // Cerebras-native default IDs (gpt-oss-120b, zai-glm-4.7) → Cerebras direct.
+  // Cerebras-native default IDs (gpt-oss-120b, zai-glm-4.7) → Cerebras direct,
+  // with OpenRouter as an on-error backup for the same model. The free-tier
+  // Cerebras key rate-limits at 5 req/min; without this wrap a 429 surfaces to
+  // the user (only blind AI-SDK retries). The fallback turns that 429 into a
+  // soft-degrade to OpenRouter (a no-op when OPENROUTER_API_KEY is unset).
   if (isCerebrasNativeModel(model) && getProviderKey("CEREBRAS_API_KEY")) {
-    return getCerebrasClient().chat(normalizeCerebrasModelId(model));
+    return withOpenRouterFallback(getCerebrasClient().chat(normalizeCerebrasModelId(model)), model);
   }
 
   // OpenRouter-catalog ids no native provider can serve (`:nitro`/`:floor`,
