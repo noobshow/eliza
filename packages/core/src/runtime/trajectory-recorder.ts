@@ -1259,13 +1259,40 @@ class JsonFileTrajectoryRecorder implements TrajectoryRecorder {
 
 	async recordStage(trajectoryId: string, stage: RecordedStage): Promise<void> {
 		if (!this.enabled) return;
-		const trajectory = this.active.get(trajectoryId);
+		let trajectory = this.active.get(trajectoryId);
 		if (!trajectory) {
+			// Create an orphan placeholder so metrics (plannerIterations,
+			// toolCallsExecuted, …) are captured even when startTrajectory was
+			// never called or was called with a different ID. The placeholder is
+			// added to `active` so subsequent recordStage calls and a later
+			// endTrajectory (if it arrives) all operate on the same object.
 			this.logger?.warn?.(
-				{ trajectoryId },
-				"[TrajectoryRecorder] recordStage: trajectory not found (was startTrajectory called?)",
+				{ trajectoryId, stageKind: stage.kind },
+				"[TrajectoryRecorder] recordStage: trajectory not found — creating orphan placeholder so metrics are captured (was startTrajectory called?)",
 			);
-			return;
+			const orphan: MutableTrajectory = {
+				trajectoryId,
+				agentId: "unknown",
+				rootMessage: { id: "", text: "" },
+				startedAt: Date.now(),
+				status: "running",
+				stages: [],
+				metrics: {
+					totalLatencyMs: 0,
+					totalPromptTokens: 0,
+					totalCompletionTokens: 0,
+					totalCacheReadTokens: 0,
+					totalCacheCreationTokens: 0,
+					totalCostUsd: 0,
+					plannerIterations: 0,
+					toolCallsExecuted: 0,
+					toolCallFailures: 0,
+					toolSearchCount: 0,
+					evaluatorFailures: 0,
+				},
+			};
+			this.active.set(trajectoryId, orphan);
+			trajectory = orphan;
 		}
 
 		const recordedStage = cloneForRecord(stage);

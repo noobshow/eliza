@@ -224,6 +224,7 @@
         "@elizaos/app-model-tester": "workspace:*",
         "@elizaos/capacitor-agent": "workspace:*",
         "@elizaos/capacitor-appblocker": "workspace:*",
+        "@elizaos/capacitor-browser-surface": "workspace:*",
         "@elizaos/capacitor-calendar": "workspace:*",
         "@elizaos/capacitor-camera": "workspace:*",
         "@elizaos/capacitor-canvas": "workspace:*",
@@ -372,6 +373,7 @@
       },
       "optionalDependencies": {
         "@elizaos/capacitor-appblocker": "workspace:*",
+        "@elizaos/capacitor-browser-surface": "workspace:*",
         "@elizaos/capacitor-bun-runtime": "workspace:*",
         "@elizaos/capacitor-camera": "workspace:*",
         "@elizaos/capacitor-canvas": "workspace:*",
@@ -4122,6 +4124,20 @@
         "@capacitor/core": "^8.3.1",
       },
     },
+    "plugins/plugin-native-browser-surface": {
+      "name": "@elizaos/capacitor-browser-surface",
+      "version": "2.0.3-beta.7",
+      "devDependencies": {
+        "@capacitor/core": "^8.3.1",
+        "@rollup/plugin-node-resolve": "^16.0.0",
+        "rollup": "^4.60.2",
+        "typescript": "^6.0.3",
+        "vitest": "^4.0.18",
+      },
+      "peerDependencies": {
+        "@capacitor/core": "^8.3.1",
+      },
+    },
     "plugins/plugin-native-bun-runtime": {
       "name": "@elizaos/capacitor-bun-runtime",
       "version": "2.0.3-beta.7",
@@ -6167,6 +6183,8 @@
     "@elizaos/capacitor-agent": ["@elizaos/capacitor-agent@workspace:plugins/plugin-native-agent"],
 
     "@elizaos/capacitor-appblocker": ["@elizaos/capacitor-appblocker@workspace:plugins/plugin-native-appblocker"],
+
+    "@elizaos/capacitor-browser-surface": ["@elizaos/capacitor-browser-surface@workspace:plugins/plugin-native-browser-surface"],
 
     "@elizaos/capacitor-bun-runtime": ["@elizaos/capacitor-bun-runtime@workspace:plugins/plugin-native-bun-runtime"],
 

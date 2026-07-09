@@ -886,6 +886,60 @@ describe("JsonFileTrajectoryRecorder", () => {
 		expect(markdown).not.toContain("csk-secret-for-markdown-test");
 	});
 
+	it("recordStage with an unknown ID creates an orphan placeholder and updates metrics", async () => {
+		// Regression for the bug where metrics stayed at 0 because recordStage
+		// exited early when the trajectory was not in the active map. The orphan
+		// path must update plannerIterations and toolCallsExecuted correctly.
+		const warn = vi.fn();
+		const recorder = createJsonFileTrajectoryRecorder({
+			rootDir: tmpDir,
+			logger: { warn },
+		});
+
+		const orphanId = "orphan-id-never-started";
+
+		await recorder.recordStage(orphanId, {
+			stageId: "stage-planner-orphan",
+			kind: "planner",
+			iteration: 1,
+			startedAt: 100,
+			endedAt: 200,
+			latencyMs: 100,
+		});
+
+		await recorder.recordStage(orphanId, {
+			stageId: "stage-tool-orphan",
+			kind: "tool",
+			startedAt: 210,
+			endedAt: 310,
+			latencyMs: 100,
+			tool: {
+				name: "SOME_TOOL",
+				args: {},
+				result: { ok: true },
+				success: true,
+				durationMs: 100,
+			},
+		});
+
+		await recorder.endTrajectory(orphanId, "finished");
+
+		// Metrics must be updated even though startTrajectory was never called.
+		const trajectory = await recorder.load(orphanId);
+		expect(trajectory).not.toBeNull();
+		expect(trajectory?.metrics.plannerIterations).toBe(1);
+		expect(trajectory?.metrics.toolCallsExecuted).toBe(1);
+		expect(trajectory?.metrics.toolCallFailures).toBe(0);
+
+		// A diagnostic warning must have been logged on the first orphan stage.
+		const orphanWarns = warn.mock.calls.filter(
+			(call) =>
+				typeof call[1] === "string" &&
+				call[1].includes("orphan placeholder"),
+		);
+		expect(orphanWarns.length).toBeGreaterThanOrEqual(1);
+	});
+
 	it("output JSON is structurally compatible with packages/scripts/run-cerebras.ts LocalRecorder", async () => {
 		// Smoke test: produce a minimal trajectory and assert every top-level
 		// field expected by the schema in PLAN.md §18.1 is present and typed.
